@@ -1,15 +1,11 @@
 # Simple AI App
 
-A minimal FastAPI service that wraps a local Ollama model via its OpenAI-compatible API, built as a learning project for CI/CD (GitHub Actions → DigitalOcean, blue/green deployment).
+A minimal FastAPI service that wraps the Groq chat completions API, built as a learning project for CI/CD (GitHub Actions → DigitalOcean, blue/green deployment).
 
 ## Requirements
 
 - Python 3.11+
-- [Ollama](https://ollama.com) installed and running locally, with a model pulled:
-
-```bash
-ollama pull llama3.2
-```
+- A [Groq API key](https://console.groq.com/keys)
 
 ## Setup
 
@@ -22,8 +18,9 @@ pip install -r requirements.txt
 Create a `.env` file in the project root:
 
 ```
-LLM_MODEL=llama3.2                              # optional, defaults to llama3.2
-OLLAMA_BASE_URL=http://localhost:11434/v1       # optional, defaults to this
+GROQ_API_KEY=your-api-key-here
+LLM_MODEL=llama-3.1-8b-instant                  # optional, defaults to llama-3.1-8b-instant
+GROQ_BASE_URL=https://api.groq.com/openai/v1    # optional, defaults to this
 ```
 
 ## Run
@@ -63,7 +60,7 @@ Response:
 {
   "reply": "FastAPI is ...",
   "latency_ms": 812.4,
-  "model": "llama3.2",
+  "model": "llama-3.1-8b-instant",
   "prompt_tokens": 42,
   "completion_tokens": 63,
   "user_id": "abc123"
@@ -74,7 +71,7 @@ Response:
 
 ```
 app/
-  main.py       # FastAPI app, endpoints, Ollama integration
+  main.py       # FastAPI app, endpoints, Groq integration
 requirements.txt
 .env            # not committed — see .gitignore
 ```

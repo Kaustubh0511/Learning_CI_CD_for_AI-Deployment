@@ -24,12 +24,15 @@ app = FastAPI(
 )
 
 #Config Setup
-OLLAMA_BASE_URL = os.getenv("OLLAMA_BASE_URL", "http://localhost:11434/v1")
+GROQ_API_KEY = os.getenv("GROQ_API_KEY")
+if not GROQ_API_KEY:
+    raise RuntimeError("GROQ_API_KEY is not set in the environment")
 
-client = OpenAI(base_url=OLLAMA_BASE_URL, api_key="ollama")
+GROQ_BASE_URL = os.getenv("GROQ_BASE_URL", "https://api.groq.com/openai/v1")
+client = OpenAI(base_url=GROQ_BASE_URL, api_key=GROQ_API_KEY)
 
 # Models
-DEFAULT_MODEL = "llama3.2"
+DEFAULT_MODEL = "llama-3.1-8b-instant"
 LLM_MODEL = os.getenv("LLM_MODEL",DEFAULT_MODEL)
 
 #Prompts for model
