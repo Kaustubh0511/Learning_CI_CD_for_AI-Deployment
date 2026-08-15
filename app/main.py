@@ -24,14 +24,12 @@ app = FastAPI(
 )
 
 #Config Setup
-OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
-if not OPENAI_API_KEY:
-    raise RuntimeError("OPENAI_API_KEY is not set in the environment")
+OLLAMA_BASE_URL = os.getenv("OLLAMA_BASE_URL", "http://localhost:11434/v1")
 
-client = OpenAI(api_key=OPENAI_API_KEY)
+client = OpenAI(base_url=OLLAMA_BASE_URL, api_key="ollama")
 
 # Models
-DEFAULT_MODEL = "gpt-4o-mini"
+DEFAULT_MODEL = "llama3.2"
 LLM_MODEL = os.getenv("LLM_MODEL",DEFAULT_MODEL)
 
 #Prompts for model
