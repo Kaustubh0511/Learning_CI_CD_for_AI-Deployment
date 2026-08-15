@@ -1,11 +1,11 @@
 # Simple AI App
 
-A minimal FastAPI service that wraps the Groq chat completions API, built as a learning project for CI/CD (GitHub Actions → DigitalOcean, blue/green deployment).
+A minimal FastAPI service that wraps the OpenAI chat completions API, built as a learning project for CI/CD (GitHub Actions → DigitalOcean, blue/green deployment).
 
 ## Requirements
 
 - Python 3.11+
-- A [Groq API key](https://console.groq.com/keys)
+- An [OpenAI API key](https://platform.openai.com/api-keys)
 
 ## Setup
 
@@ -18,9 +18,8 @@ pip install -r requirements.txt
 Create a `.env` file in the project root:
 
 ```
-GROQ_API_KEY=your-api-key-here
-LLM_MODEL=llama-3.1-8b-instant                  # optional, defaults to llama-3.1-8b-instant
-GROQ_BASE_URL=https://api.groq.com/openai/v1    # optional, defaults to this
+OPENAI_API_KEY=your-api-key-here
+LLM_MODEL=gpt-4o-mini        # optional, defaults to gpt-4o-mini
 ```
 
 ## Run
@@ -60,7 +59,7 @@ Response:
 {
   "reply": "FastAPI is ...",
   "latency_ms": 812.4,
-  "model": "llama-3.1-8b-instant",
+  "model": "gpt-4o-mini",
   "prompt_tokens": 42,
   "completion_tokens": 63,
   "user_id": "abc123"
@@ -71,7 +70,7 @@ Response:
 
 ```
 app/
-  main.py       # FastAPI app, endpoints, Groq integration
+  main.py       # FastAPI app, endpoints, OpenAI integration
 requirements.txt
 .env            # not committed — see .gitignore
 ```

@@ -24,15 +24,14 @@ app = FastAPI(
 )
 
 #Config Setup
-GROQ_API_KEY = os.getenv("GROQ_API_KEY")
-if not GROQ_API_KEY:
-    raise RuntimeError("GROQ_API_KEY is not set in the environment")
+OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
+if not OPENAI_API_KEY:
+    raise RuntimeError("OPENAI_API_KEY is not set in the environment")
 
-GROQ_BASE_URL = os.getenv("GROQ_BASE_URL", "https://api.groq.com/openai/v1")
-client = OpenAI(base_url=GROQ_BASE_URL, api_key=GROQ_API_KEY)
+client = OpenAI(api_key=OPENAI_API_KEY)
 
 # Models
-DEFAULT_MODEL = "llama-3.1-8b-instant"
+DEFAULT_MODEL = "gpt-4o-mini"
 LLM_MODEL = os.getenv("LLM_MODEL",DEFAULT_MODEL)
 
 #Prompts for model
