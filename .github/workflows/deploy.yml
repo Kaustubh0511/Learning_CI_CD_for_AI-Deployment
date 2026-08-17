@@ -25,6 +25,25 @@ jobs:
           GROQ_API_KEY: "test-key-for-ci-testing"
         run: python -c "from app.main import app; print('App imports successfully')"
 
+      - name: Run security tests
+        env:
+          GROQ_API_KEY: "test-key-for-ci-testing"
+        run: |
+          echo "Running security tests..."
+          pytest tests/test_security.py -v
+
+      - name: Run prompt tests
+        env:
+          GROQ_API_KEY: "test-key-for-ci-testing"
+        run: |
+          echo "Running prompt tests..."
+          pytest tests/test_prompt.py -v
+
+      - name: Test summary
+        env:
+          GROQ_API_KEY: "test-key-for-ci-testing"
+        run: pytest tests/ -ra -q
+
   build:
     needs: test
     runs-on: ubuntu-latest

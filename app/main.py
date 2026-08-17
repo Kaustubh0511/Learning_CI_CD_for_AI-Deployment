@@ -6,6 +6,8 @@ import os
 import datetime
 import time
 
+from app.security import PromptInjectionDetector
+
 load_dotenv()
 
 app = FastAPI(
@@ -36,6 +38,8 @@ LLM_MODEL = os.getenv("LLM_MODEL", DEFAULT_MODEL)
 # Prompts for model
 prompt = """You are a helpful assitant that can answer questions and help with tasks"""
 
+injection_detector = PromptInjectionDetector()
+
 
 class ChatRequest(BaseModel):
     user_id: str
@@ -63,6 +67,15 @@ async def health():
 @app.post("/chat", response_model=ChatResponse)
 async def chat(request: ChatRequest):
     print(f"Recieved request from user {request.user_id}:{request.message}")
+
+    detection = injection_detector.scan(request.message)
+    if detection.is_injection:
+        print(f"Blocked potential prompt injection from user {request.user_id}: {detection.matched_patterns}")
+        raise HTTPException(
+            status_code=400,
+            detail="Your message was flagged as a potential prompt injection attempt."
+        )
+
     full_prompt = f"{prompt}\nUser: {request.message}\nAssistant:"
     start_time = time.time()
     try:
