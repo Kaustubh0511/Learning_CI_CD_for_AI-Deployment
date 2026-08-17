@@ -1,0 +1,68 @@
+name: Deploy AI app to Digital Ocean
+
+on:
+  push:
+    branches:
+      - master
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Run tests Imports
+        env:
+          GROQ_API_KEY: "test-key-for-ci-testing"
+        run: python -c "from app.main import app; print('App imports successfully')"
+
+  build:
+    needs: test
+    runs-on: ubuntu-latest
+    steps:
+      - name: Build image on Droplet
+        uses: appleboy/ssh-action@v1
+        with:
+          host: ${{ secrets.DROPLET_HOST }}
+          username: ${{ secrets.DROPLET_USER }}
+          key: ${{ secrets.DROPLET_SSH_KEY }}
+          script: |
+            cd ${{ secrets.DROPLET_APP_PATH }}
+            git pull origin master
+            docker build -t simple-ai-app .
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - name: Deploy to Droplet
+        uses: appleboy/ssh-action@v1
+        env:
+          GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
+          LLM_MODEL: ${{ secrets.LLM_MODEL }}
+        with:
+          host: ${{ secrets.DROPLET_HOST }}
+          username: ${{ secrets.DROPLET_USER }}
+          key: ${{ secrets.DROPLET_SSH_KEY }}
+          envs: GROQ_API_KEY,LLM_MODEL
+          script: |
+            cd ${{ secrets.DROPLET_APP_PATH }}
+            docker stop simple-ai-app || true
+            docker rm simple-ai-app || true
+            docker run -d \
+              --name simple-ai-app \
+              -e GROQ_API_KEY=$GROQ_API_KEY \
+              -e LLM_MODEL=$LLM_MODEL \
+              -p 8000:8000 \
+              --restart unless-stopped \
+              simple-ai-app
+
