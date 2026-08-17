@@ -23,12 +23,20 @@ echo " ${APP_NAME}"
 echo "=========================================="
 
 # ============================================================
-# Check Ubuntu / sudo
+# Root vs normal user
+#
+# Both are supported: as root, "sudo" is skipped entirely and
+# the docker-group/passwordless-sudo steps (which only exist to
+# let a normal user run docker/systemctl without a password)
+# are unnecessary, since root already can.
 # ============================================================
 
 if [ "$EUID" -eq 0 ]; then
-    echo "Please run this script as your normal user, not root."
-    exit 1
+    SUDO=""
+    RUN_USER="root"
+else
+    SUDO="sudo"
+    RUN_USER="$USER"
 fi
 
 # ============================================================
@@ -38,9 +46,9 @@ fi
 echo
 echo "Installing required packages..."
 
-sudo apt-get update
+$SUDO apt-get update
 
-sudo apt-get install -y \
+$SUDO apt-get install -y \
     git \
     curl \
     nginx \
@@ -55,40 +63,48 @@ if ! command -v docker >/dev/null 2>&1; then
     echo
     echo "Installing Docker..."
 
-    curl -fsSL https://get.docker.com | sudo sh
+    curl -fsSL https://get.docker.com | $SUDO sh
 
-    sudo systemctl enable docker
-    sudo systemctl start docker
+    $SUDO systemctl enable docker
+    $SUDO systemctl start docker
 
-    sudo usermod -aG docker "$USER"
+    if [ "$RUN_USER" != "root" ]; then
+        $SUDO usermod -aG docker "$RUN_USER"
+
+        echo
+        echo "Docker installed."
+        echo "IMPORTANT: Log out and log back in once so Docker group"
+        echo "permissions take effect, then run this script again."
+        exit 0
+    fi
 
     echo
     echo "Docker installed."
-    echo "IMPORTANT: Log out and log back in once so Docker group"
-    echo "permissions take effect, then run this script again."
-    exit 0
+else
+    echo "Docker is already installed."
 fi
 
-echo "Docker is already installed."
-
 # Make sure Docker is running
-sudo systemctl enable docker
-sudo systemctl start docker
+$SUDO systemctl enable docker
+$SUDO systemctl start docker
 
 # ============================================================
-# Passwordless sudo for automated deploys
+# Passwordless sudo for automated deploys (normal user only)
 #
 # deploy.sh runs nginx/systemctl commands over SSH from
 # GitHub Actions, which cannot answer a sudo password prompt.
+# Root already has full privileges, so this is skipped for it.
 # ============================================================
 
-echo
-echo "Allowing $USER passwordless sudo for automated deploys..."
+if [ "$RUN_USER" != "root" ]; then
+    echo
+    echo "Allowing $RUN_USER passwordless sudo for automated deploys..."
 
-SUDOERS_FILE="/etc/sudoers.d/${USER}-deploy"
-echo "$USER ALL=(ALL) NOPASSWD: ALL" | sudo tee "$SUDOERS_FILE" > /dev/null
-sudo chmod 440 "$SUDOERS_FILE"
-sudo visudo -cf "$SUDOERS_FILE"
+    SUDOERS_FILE="/etc/sudoers.d/${RUN_USER}-deploy"
+    echo "$RUN_USER ALL=(ALL) NOPASSWD: ALL" | $SUDO tee "$SUDOERS_FILE" > /dev/null
+    $SUDO chmod 440 "$SUDOERS_FILE"
+    $SUDO visudo -cf "$SUDOERS_FILE"
+fi
 
 # ============================================================
 # Firewall
@@ -101,17 +117,17 @@ sudo visudo -cf "$SUDOERS_FILE"
 echo
 echo "Configuring firewall..."
 
-sudo ufw allow OpenSSH
-sudo ufw allow 80/tcp
-sudo ufw --force enable
+$SUDO ufw allow OpenSSH
+$SUDO ufw allow 80/tcp
+$SUDO ufw --force enable
 
 # ============================================================
 # Nginx: base setup
 # ============================================================
 
-sudo rm -f /etc/nginx/sites-enabled/default
-sudo systemctl enable nginx
-sudo systemctl start nginx
+$SUDO rm -f /etc/nginx/sites-enabled/default
+$SUDO systemctl enable nginx
+$SUDO systemctl start nginx
 
 # ============================================================
 # GitHub SSH access
@@ -146,8 +162,8 @@ echo "GitHub SSH access OK."
 echo
 echo "Setting up application directory..."
 
-sudo mkdir -p "$APP_DIR"
-sudo chown -R "$USER:$USER" "$APP_DIR"
+$SUDO mkdir -p "$APP_DIR"
+$SUDO chown -R "${RUN_USER}:${RUN_USER}" "$APP_DIR"
 
 if [ -d "$APP_DIR/.git" ]; then
     echo "Repository already exists."
@@ -195,12 +211,12 @@ if [ ! -f "$ENV_FILE" ]; then
     echo
     echo "Creating ${ENV_FILE}"
 
-    sudo tee "$ENV_FILE" > /dev/null <<EOF
+    $SUDO tee "$ENV_FILE" > /dev/null <<EOF
 GROQ_API_KEY=
 LLM_MODEL=llama-3.1-8b-instant
 EOF
 
-    sudo chmod 600 "$ENV_FILE"
+    $SUDO chmod 600 "$ENV_FILE"
 
     echo
     echo "ERROR: Please edit:"
