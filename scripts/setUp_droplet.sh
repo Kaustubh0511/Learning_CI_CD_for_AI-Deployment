@@ -1,4 +1,3 @@
-```bash
 #!/bin/bash
 
 set -e
@@ -9,14 +8,12 @@ set -e
 
 APP_NAME="Learning_CI_CD_for_AI-Deployment"
 APP_DIR="/opt/${APP_NAME}"
+IMAGE_NAME="${APP_NAME,,}"
 
 REPO_URL="git@github.com:Kaustubh0511/Learning_CI_CD_for_AI-Deployment.git"
 BRANCH="master"
 
-DOCKER_IMAGE="${APP_NAME}:latest"
-
-BLUE_PORT=8000
-NGINX_CONFIG="/etc/nginx/sites-available/${APP_NAME}"
+DOCKER_IMAGE="${IMAGE_NAME}:latest"
 
 ENV_FILE="/etc/${APP_NAME}.env"
 
@@ -47,6 +44,7 @@ sudo apt-get install -y \
     git \
     curl \
     nginx \
+    ufw \
     ca-certificates
 
 # ============================================================
@@ -78,14 +76,68 @@ sudo systemctl enable docker
 sudo systemctl start docker
 
 # ============================================================
-# Check Docker Compose
+# Passwordless sudo for automated deploys
+#
+# deploy.sh runs nginx/systemctl commands over SSH from
+# GitHub Actions, which cannot answer a sudo password prompt.
 # ============================================================
 
-if ! docker compose version >/dev/null 2>&1; then
-    echo "ERROR: Docker Compose is not available."
-    echo "Please install Docker Compose and run this script again."
+echo
+echo "Allowing $USER passwordless sudo for automated deploys..."
+
+SUDOERS_FILE="/etc/sudoers.d/${USER}-deploy"
+echo "$USER ALL=(ALL) NOPASSWD: ALL" | sudo tee "$SUDOERS_FILE" > /dev/null
+sudo chmod 440 "$SUDOERS_FILE"
+sudo visudo -cf "$SUDOERS_FILE"
+
+# ============================================================
+# Firewall
+#
+# deploy.sh publishes the blue/green containers directly on
+# 8000/8001. Only SSH and HTTP should be reachable externally,
+# otherwise those ports bypass Nginx entirely.
+# ============================================================
+
+echo
+echo "Configuring firewall..."
+
+sudo ufw allow OpenSSH
+sudo ufw allow 80/tcp
+sudo ufw --force enable
+
+# ============================================================
+# Nginx: base setup
+# ============================================================
+
+sudo rm -f /etc/nginx/sites-enabled/default
+sudo systemctl enable nginx
+sudo systemctl start nginx
+
+# ============================================================
+# GitHub SSH access
+# ============================================================
+
+echo
+echo "Checking GitHub SSH access..."
+
+if ! ssh -o StrictHostKeyChecking=accept-new -T git@github.com 2>&1 | grep -q "successfully authenticated"; then
+    if [ ! -f "$HOME/.ssh/id_ed25519" ]; then
+        echo "Generating a deploy SSH key..."
+        ssh-keygen -t ed25519 -f "$HOME/.ssh/id_ed25519" -N "" -C "${APP_NAME}-droplet"
+    fi
+
+    echo
+    echo "ERROR: This droplet's SSH key is not authorized on GitHub."
+    echo "Add the following public key as a Deploy Key on the repo"
+    echo "(Settings > Deploy keys, read access is enough):"
+    echo
+    cat "$HOME/.ssh/id_ed25519.pub"
+    echo
+    echo "Then run this script again."
     exit 1
 fi
+
+echo "GitHub SSH access OK."
 
 # ============================================================
 # Clone repository
@@ -169,49 +221,11 @@ if [ -z "${GROQ_API_KEY:-}" ]; then
 fi
 
 # ============================================================
-# Configure Nginx
-# ============================================================
-
-echo
-echo "Configuring Nginx..."
-
-sudo tee "$NGINX_CONFIG" > /dev/null <<EOF
-server {
-    listen 80;
-    server_name _;
-
-    location / {
-        proxy_pass http://127.0.0.1:${BLUE_PORT};
-
-        proxy_set_header Host \$host;
-        proxy_set_header X-Real-IP \$remote_addr;
-        proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
-        proxy_set_header X-Forwarded-Proto \$scheme;
-    }
-}
-EOF
-
-sudo ln -sf \
-    "$NGINX_CONFIG" \
-    "/etc/nginx/sites-enabled/${APP_NAME}"
-
-# Remove default Nginx site
-sudo rm -f /etc/nginx/sites-enabled/default
-
-# Test Nginx configuration
-sudo nginx -t
-
-sudo systemctl enable nginx
-sudo systemctl restart nginx
-
-# ============================================================
 # Build Docker image
 # ============================================================
 
 echo
 echo "Building Docker image..."
-
-cd "$APP_DIR"
 
 docker build \
     -t "$DOCKER_IMAGE" \
@@ -223,64 +237,15 @@ echo "Docker image built successfully."
 # ============================================================
 # First deployment
 #
-# We explicitly start BLUE here because there is no
-# existing environment yet.
+# deploy.sh handles picking the environment (defaults to blue
+# when nothing is running yet), starting the container, the
+# health check, and the Nginx switch.
 # ============================================================
 
 echo
-echo "Starting first BLUE deployment..."
+echo "Running first deployment..."
 
-# Clean up anything left over from an earlier attempt
-docker stop "${APP_NAME}-blue" 2>/dev/null || true
-docker rm "${APP_NAME}-blue" 2>/dev/null || true
-
-docker run -d \
-    --name "${APP_NAME}-blue" \
-    -e GROQ_API_KEY="${GROQ_API_KEY}" \
-    -e LLM_MODEL="${LLM_MODEL:-llama-3.1-8b-instant}" \
-    -p "${BLUE_PORT}:8000" \
-    --restart unless-stopped \
-    "$DOCKER_IMAGE"
-
-# ============================================================
-# Health check
-# ============================================================
-
-echo
-echo "Waiting for application to become healthy..."
-
-MAX_RETRIES=10
-retry_count=0
-
-until curl -sf "http://127.0.0.1:${BLUE_PORT}/health" > /dev/null; do
-
-    retry_count=$((retry_count + 1))
-
-    if [ "$retry_count" -ge "$MAX_RETRIES" ]; then
-        echo
-        echo "ERROR: Application failed health check."
-
-        docker logs "${APP_NAME}-blue" || true
-
-        docker stop "${APP_NAME}-blue" 2>/dev/null || true
-        docker rm "${APP_NAME}-blue" 2>/dev/null || true
-
-        exit 1
-    fi
-
-    echo "Health check attempt ${retry_count}/${MAX_RETRIES}..."
-    sleep 2
-done
-
-echo
-echo "Application is healthy."
-
-# ============================================================
-# Final Nginx reload
-# ============================================================
-
-sudo nginx -t
-sudo systemctl reload nginx
+bash "$APP_DIR/deploy.sh" "$DOCKER_IMAGE"
 
 # ============================================================
 # Final status
@@ -294,21 +259,7 @@ echo
 echo "Application:"
 echo "  http://<DROPLET_IP>/"
 echo
-echo "Environment:"
-echo "  BLUE"
-echo
-echo "Container:"
-echo "  ${APP_NAME}-blue"
-echo
-echo "Port:"
-echo "  ${BLUE_PORT}"
-echo
-echo "Docker image:"
-echo "  ${DOCKER_IMAGE}"
-echo
-echo "=========================================="
 
 docker ps \
     --filter "name=${APP_NAME}-" \
     --format "table {{.Names}}\t{{.Status}}\t{{.Ports}}"
-```
