@@ -10,7 +10,7 @@ APP_NAME="Learning_CI_CD_for_AI-Deployment"
 APP_DIR="/opt/${APP_NAME}"
 
 REPO_URL="git@github.com:Kaustubh0511/Learning_CI_CD_for_AI-Deployment.git"
-BRANCH="main"
+BRANCH="master"
 
 DOCKER_IMAGE="${APP_NAME}:latest"
 ENV_FILE="/etc/${APP_NAME}.env"
